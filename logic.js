@@ -1,27 +1,70 @@
-// We create the tile layer that will be the background of our map.
-console.log("working");
+// We create the tile layers that will be the selectable backgrounds of our map.
+// One for our grayscale background.
 
 var apiKey = "YOUR API KEY HERE!";
 
 var graymap = L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
   attribution: "Map data &copy; <a href='https://www.openstreetmap.org/'>OpenStreetMap</a> contributors, <a href='https://creativecommons.org/licenses/by-sa/2.0/'>CC-BY-SA</a>, Imagery © <a href='https://www.mapbox.com/'>Mapbox</a>",
   maxZoom: 18,
-  id: "mapbox.streets",
+  id: "mapbox.light",
   accessToken: apiKey
 });
 
-// We create the map object with options.
+var satellitemap = L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
+  attribution: "Map data &copy; <a href='https://www.openstreetmap.org/'>OpenStreetMap</a> contributors, <a href='https://creativecommons.org/licenses/by-sa/2.0/'>CC-BY-SA</a>, Imagery © <a href='https://www.mapbox.com/'>Mapbox</a>",
+  maxZoom: 18,
+  id: "mapbox.streets-satellite",
+  accessToken: apiKey
+});
+
+var outdoors = L.tileLayer("https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={accessToken}", {
+  attribution: "Map data &copy; <a href='https://www.openstreetmap.org/'>OpenStreetMap</a> contributors, <a href='https://creativecommons.org/licenses/by-sa/2.0/'>CC-BY-SA</a>, Imagery © <a href='https://www.mapbox.com/'>Mapbox</a>",
+  maxZoom: 18,
+  id: "mapbox.outdoors",
+  accessToken: apiKey
+});
+
+// We then create the map object with options. Adding the tile layers we just
+// created to an array of layers.
 var map = L.map("mapid", {
   center: [
     40.7, -94.5
   ],
-  zoom: 3
+  zoom: 3,
+  layers: [graymap, satellitemap, outdoors]
 });
 
-// Then we add our 'graymap' tile layer to the map.
+// Adding our 'graymap' tile layer to the map.
 graymap.addTo(map);
 
-// Here we make an AJAX call that retrieves our earthquake geoJSON data.
+// We create the layers for our two different sets of data, earthquakes and
+// tectonicplates.
+var tectonicplates = new L.LayerGroup();
+var earthquakes = new L.LayerGroup();
+
+// Defining an object that contains all of our different map choices. Only one
+// of these maps will be visible at a time!
+var baseMaps = {
+  Satellite: satellitemap,
+  Grayscale: graymap,
+  Outdoors: outdoors
+};
+
+// We define an object that contains all of our overlays. Any combination of
+// these overlays may be visible at the same time!
+var overlays = {
+  "Tectonic Plates": tectonicplates,
+  Earthquakes: earthquakes
+};
+
+// Then we add a control to the map that will allow the user to change which
+// layers are visible.
+L
+  .control
+  .layers(baseMaps, overlays)
+  .addTo(map);
+
+// Our AJAX call retrieves our earthquake geoJSON data.
 d3.json("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson", function(data) {
 
   // This function returns the style data for each of the earthquakes we plot on
@@ -39,7 +82,7 @@ d3.json("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geoj
     };
   }
 
-  // This function determines the color of the marker based on the magnitude of the earthquake.
+  // Determines the color of the marker based on the magnitude of the earthquake.
   function getColor(magnitude) {
     switch (true) {
     case magnitude > 5:
@@ -75,20 +118,27 @@ d3.json("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geoj
     },
     // We set the style for each circleMarker using our styleInfo function.
     style: styleInfo,
-    // We create a popup for each marker to display the magnitude and location of the earthquake after the marker has been created and styled
+    // We create a popup for each marker to display the magnitude and location of
+    // the earthquake after the marker has been created and styled
     onEachFeature: function(feature, layer) {
       layer.bindPopup("Magnitude: " + feature.properties.mag + "<br>Location: " + feature.properties.place);
     }
-  }).addTo(map);
+    // We add the data to the earthquake layer instead of directly to the map.
+  }).addTo(earthquakes);
+
+  // Then we add the earthquake layer to our map.
+  earthquakes.addTo(map);
 
   // Here we create a legend control object.
   var legend = L.control({
     position: "bottomright"
   });
 
-  // Then add all the details for the legend
+  // Then we add all the details for our legend
   legend.onAdd = function() {
-    var div = L.DomUtil.create("div", "info legend");
+    var div = L
+      .DomUtil
+      .create("div", "info legend");
 
     var grades = [0, 1, 2, 3, 4, 5];
     var colors = [
@@ -100,15 +150,29 @@ d3.json("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geoj
       "#ea2c2c"
     ];
 
-    // Looping through our intervals to generate a label with a colored square for each interval.
+    // Loop through our intervals and generate a label with a colored square for each interval.
     for (var i = 0; i < grades.length; i++) {
-      div.innerHTML +=
-        "<i style='background: " + colors[i] + "'></i> " +
+      div.innerHTML += "<i style='background: " + colors[i] + "'></i> " +
         grades[i] + (grades[i + 1] ? "&ndash;" + grades[i + 1] + "<br>" : "+");
     }
     return div;
   };
 
-  // Finally, we our legend to the map.
+  // We add our legend to the map.
   legend.addTo(map);
+
+  // Here we make an AJAX call to get our Tectonic Plate geoJSON data.
+  d3.json("https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json",
+    function(platedata) {
+      // Adding our geoJSON data, along with style information, to the tectonicplates
+      // layer.
+      L.geoJson(platedata, {
+        color: "orange",
+        weight: 2
+      })
+      .addTo(tectonicplates);
+
+      // Then add the tectonicplates layer to the map.
+      tectonicplates.addTo(map);
+    });
 });
